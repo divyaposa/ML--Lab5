@@ -14,157 +14,132 @@ This code:
 - Uses OOP principles for structure and readability
 """
 
-import numpy as np
-from sklearn.linear_model import LinearRegression
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
+import numpy as np  # For numerical operations like arrays and mean
+from sklearn.linear_model import LinearRegression  # For linear regression model
+from torchvision import datasets, transforms  # For loading image datasets and transforming them
+from torch.utils.data import DataLoader  # For batching images (not used directly here)
 
+# ===== Class to handle dataset loading and feature extraction =====
 class MiniImageNetFeatureExtractor:
     """
-    Handles loading of MiniImageNet 2-class subset and extracting 
-    a single numerical feature per image.
+    Loads MiniImageNet 2-class subset and extracts ONE numerical feature per image.
     """
 
     def __init__(self, data_dir: str, classes: list, image_size: int = 84):
         """
-        Constructor to initialize dataset path, target classes, and image size.
-        
-        Parameters:
-        -----------
-        data_dir : str
-            Path to dataset folder.
-        classes : list
-            List of class folder names to include (e.g., ['n01532829', 'n01749939']).
-        image_size : int
-            Image resize dimension (MiniImageNet standard: 84x84).
+        Initializes the dataset loader with path, target classes, and image size.
         """
-        self.data_dir = data_dir
-        self.classes = classes
-        self.image_size = image_size
+        self.data_dir = data_dir  # Path to dataset folder
+        self.classes = classes  # List of 2 classes to use
+        self.image_size = image_size  # Resize images to 84x84
 
-        # Transform: Resize images and convert to tensor
+        # Define image transformation: resize + convert to tensor
         self.transform = transforms.Compose([
-            transforms.Resize((self.image_size, self.image_size)),
-            transforms.ToTensor()
+            transforms.Resize((self.image_size, self.image_size)),  # Resize image
+            transforms.ToTensor()  # Convert image to PyTorch tensor
         ])
 
     def load_data(self):
         """
-        Loads dataset from the given directory and filters only specified classes.
-        
-        Returns:
-            list of (image_tensor, label_index)
+        Loads images from folders and keeps only the selected classes.
+        Returns a list of (image_tensor, label_index).
         """
-        # Load dataset using ImageFolder (expects subfolders per class)
+        # Load all images from dataset folder (expects class subfolders)
         dataset = datasets.ImageFolder(root=self.data_dir, transform=self.transform)
 
-        # Filter dataset to only required classes (keep only selected class images)
+        # Keep only images whose class is in selected classes
         filtered_data = [
-            (img, label) 
-            for img, label in dataset 
+            (img, label)
+            for img, label in dataset
             if dataset.classes[label] in self.classes
         ]
         
-        # Create a new mapping: class name → index starting from 0
+        # Map class names to 0 and 1 (new indices)
         class_to_idx = {cls_name: idx for idx, cls_name in enumerate(self.classes)}
 
-        # Update labels to new indices (0 and 1)
+        # Update labels in filtered_data to new numeric indices
         filtered_data = [
-            (img, class_to_idx[dataset.classes[label]]) 
+            (img, class_to_idx[dataset.classes[label]])
             for img, label in filtered_data
         ]
 
-        return filtered_data
+        return filtered_data  # Return filtered images and numeric labels
 
     def extract_features_and_labels(self):
         """
-        Extracts mean pixel intensity for each image and numeric labels.
-        
+        Extracts one numerical feature (mean pixel intensity) and numeric labels.
         Returns:
-            X (np.ndarray) - shape (num_samples, 1) → feature matrix
-            y (np.ndarray) - shape (num_samples,)   → labels as floats
+            X: numpy array of shape (num_samples, 1)
+            y: numpy array of shape (num_samples,)
         """
         data = self.load_data()  # Load filtered dataset
 
-        features = []
-        labels = []
+        features = []  # To store mean intensity per image
+        labels = []    # To store numeric labels
 
         for img_tensor, label in data:
-            # Convert PyTorch tensor → NumPy array
-            img_np = img_tensor.numpy()
-            
-            # Calculate mean pixel intensity (single number per image)
-            mean_intensity = np.mean(img_np)
+            img_np = img_tensor.numpy()  # Convert tensor to NumPy array
+            mean_intensity = np.mean(img_np)  # Compute mean pixel intensity
+            features.append(mean_intensity)  # Add feature to list
+            labels.append(label)  # Add numeric label to list
 
-            features.append(mean_intensity)
-            labels.append(label)
+        # Convert lists to NumPy arrays for sklearn
+        X = np.array(features).reshape(-1, 1)  # 2D array with one feature column
+        y = np.array(labels, dtype=float)      # Convert labels to float for regression
 
-        # Convert lists to NumPy arrays
-        X = np.array(features).reshape(-1, 1)  # 2D array for sklearn (n_samples, 1 feature)
-        y = np.array(labels, dtype=float)      # Numeric labels for regression
-
-        return X, y
+        return X, y  # Return features and labels
 
 
+# ===== Class to train and evaluate linear regression =====
 class LinearRegressionTrainer:
     """
-    Trains and evaluates a Linear Regression model using one feature and numeric targets.
+    Trains and predicts using Linear Regression on numeric features.
     """
 
     def __init__(self, X_train: np.ndarray, y_train: np.ndarray):
         """
-        Initialize with training data.
-        
-        Parameters:
-        -----------
-        X_train : np.ndarray
-            Feature matrix.
-        y_train : np.ndarray
-            Target labels.
+        Initializes trainer with training data.
         """
-        self.X_train = X_train
-        self.y_train = y_train
-        self.model = LinearRegression()  # Create sklearn linear regression model
+        self.X_train = X_train  # Feature matrix
+        self.y_train = y_train  # Target labels
+        self.model = LinearRegression()  # Create Linear Regression model
 
     def train(self):
-        """Fits the Linear Regression model to the training data."""
+        """Fits the Linear Regression model on training data."""
         self.model.fit(self.X_train, self.y_train)
 
     def predict(self):
-        """Predicts y values for the training set."""
+        """Predicts target values for the training set."""
         return self.model.predict(self.X_train)
 
     def display_sample_predictions(self, num_samples: int = 5):
         """
-        Displays sample predictions vs actual values.
-
-        Parameters:
-        -----------
-        num_samples : int
-            Number of samples to display.
+        Shows predicted vs actual labels for the first few samples.
         """
-        predictions = self.predict()  # Get predictions from the model
+        predictions = self.predict()  # Get predictions from model
 
         print(f"\nFirst {num_samples} Predictions vs Actuals:")
-        for i in range(min(num_samples, len(predictions))):
-            # Show predicted vs actual label
-            print(f"Predicted: {predictions[i]:.4f}  |  Actual: {self.y_train[i]}")
+        for i in range(min(num_samples, len(predictions))):  # Loop through samples
+            print(f"Predicted: {predictions[i]:.4f}  |  Actual: {self.y_train[i]}")  # Show predicted and actual
 
 
+# ===== Main script =====
 if __name__ == "__main__":
-    # === 1. Data Preparation ===
-    data_dir = r'C:/Users/Divya/Desktop/labdataset'   # Path to dataset
-    selected_classes = ["n01532829", "n01749939"]     # Choose 2 specific classes
+    # 1. Data path and selected classes
+    data_dir = r'C:/Users/Divya/Desktop/labdataset'  # Path to dataset
+    selected_classes = ["n01532829", "n01749939"]    # Two specific classes
 
-    # Create feature extractor object
+    # 2. Create feature extractor object
     extractor = MiniImageNetFeatureExtractor(data_dir, selected_classes)
 
-    # Extract features (mean intensity) and numeric labels
+    # 3. Extract features (mean intensity) and numeric labels
     X_train, y_train = extractor.extract_features_and_labels()
 
-    # === 2. Train Linear Regression ===
-    trainer = LinearRegressionTrainer(X_train, y_train)  # Pass data to trainer
-    trainer.train()  # Train the model
+    # 4. Create Linear Regression trainer
+    trainer = LinearRegressionTrainer(X_train, y_train)
 
-    # === 3. Show Results ===
-    trainer.display_sample_predictions(num_samples=1200)  # Show predictions for up to 1200 samples
+    # 5. Train the model
+    trainer.train()
+
+    # 6. Display predictions vs actuals (up to 1200 samples)
+    trainer.display_sample_predictions(num_samples=1200)
